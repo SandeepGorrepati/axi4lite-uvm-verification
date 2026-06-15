@@ -1,0 +1,16 @@
+# Simulator artifacts
+work/
+transcript
+*.vcd
+*.wlf
+*.fsdb
+*.log
+csrc/
+simv*
+ucli.key
+vc_hdrs.h
+*.vstf
+INCA_libs/
+xcelium.d/
+.Xil/
+*.jou

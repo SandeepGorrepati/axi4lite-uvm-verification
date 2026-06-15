@@ -1,0 +1,27 @@
+name: RTL Lint
+
+# Lints the synthesizable DUT with Verilator on every push / PR.
+# (The UVM testbench needs a commercial simulator and is run on EDA Playground;
+#  this CI keeps the RTL clean automatically and gives the repo a status badge.)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verilator-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+          verilator --version
+
+      - name: Lint AXI4-Lite slave DUT
+        run: verilator --lint-only -Wall -Wno-DECLFILENAME rtl/axi4lite_slave.sv

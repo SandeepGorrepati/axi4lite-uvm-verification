@@ -52,7 +52,7 @@ module axi4lite_slave #(
     localparam int MEM_AW   = $clog2(MEM_WORDS);             // word index bits
     localparam logic [1:0] RESP_OKAY   = 2'b00;
     localparam logic [1:0] RESP_DECERR = 2'b11;              // out-of-range decode error
-    localparam int unsigned VALID_BYTES = MEM_WORDS * (DATA_WIDTH/8); // in-range byte span
+    localparam int VALID_BYTES = MEM_WORDS * (DATA_WIDTH/8); // in-range byte span
 
     logic [DATA_WIDTH-1:0] mem [0:MEM_WORDS-1];
 

@@ -1,5 +1,7 @@
 # AXI4-Lite UVM Verification Environment
 
+![RTL Lint](https://github.com/SandeepGorrepati/axi4lite-uvm-verification/actions/workflows/lint.yml/badge.svg)
+
 A complete, industry-style **UVM** testbench verifying an AXI4-Lite slave with an
 internal word-addressable memory. This is a real UVM environment — `uvm_env`,
 `uvm_agent`, `uvm_sequencer`, `uvm_driver`, `uvm_monitor`, `uvm_scoreboard`

@@ -112,8 +112,12 @@ UVM_INFO ... [SCB] RESULT: PASS
 UVM_INFO ... [COV] Functional coverage = 100.00%
 UVM_INFO ... [TEST_DONE] ... UVM_ERROR :    0  UVM_FATAL :    0
 ```
-(Exact counts vary with the random seed; MISMATCH and RESP_MISMATCH must be 0, and
-coverage reaches 100% of the defined coverpoints with the regression test.)
+(Illustrative expected output. Exact counts vary with the random seed; MISMATCH and
+RESP_MISMATCH must be 0. **Note:** the scoreboard PASS / 0-error result runs on any
+simulator (incl. Icarus), but the `Functional coverage = 100%` line requires a
+**covergroup-capable simulator (Questa/VCS, e.g. EDA Playground)** — Icarus does not
+score covergroups. Measured coverage closure is demonstrated in the companion
+`ai-mac-array-verification` repo via in-testbench bin tracking.)
 
 ## Error-path verification (DECERR)
 
@@ -193,12 +197,18 @@ report -detail`) as proof.
 - Assertion-based verification (concurrent SVA) for protocol legality.
 - Reusable agent and a layered sequence library.
 
-## Roadmap — top-tier extensions (planned)
-The next upgrades that push this from strong to top-tier:
-- ✅ **DECERR error-path feature** — DONE (out-of-range → DECERR, error sequence,
-  scoreboard response-prediction, resp/oob coverage, legal-response SVA).
-- ✅ **RAL** — DONE (`uvm_reg_block` + `uvm_mem` + `uvm_reg_adapter` in
-  `tb/axi4lite_ral.sv`; run `+UVM_TESTNAME=axi4lite_ral_test`).
+## Extensions — status
+
+**Implemented (in this repo):**
+- ✅ **DECERR error-path** — out-of-range → DECERR, `axi4lite_error_seq`,
+  scoreboard response-prediction, resp/oob coverage, legal-response SVA.
+- ✅ **UVM RAL** — `uvm_reg_block` + `uvm_mem` + `uvm_reg_adapter` in
+  `tb/axi4lite_ral.sv` (run `+UVM_TESTNAME=axi4lite_ral_test`).
+- ✅ **11 concurrent SVA assertions** bound to the interface.
+- ✅ **Formal proof** — 5 response/handshake safety properties proven with
+  SymbiYosys + Z3 (k-induction); see `formal/`.
+
+**Planned (not yet implemented):**
 - **Random back-pressure** — wait-states on AWREADY/WREADY/ARREADY + outstanding/
   interleaved transactions.
 - **Gate-level / FPGA** smoke of the DUT.

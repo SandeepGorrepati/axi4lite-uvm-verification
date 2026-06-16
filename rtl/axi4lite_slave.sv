@@ -4,7 +4,8 @@
 //
 // - 32-bit data, 32-bit address (only ADDR_LSB+MEM_AW bits decoded)
 // - Independent AW / W acceptance, single outstanding response
-// - Always returns OKAY (2'b00) response
+// - Returns OKAY (2'b00) for in-range accesses; DECERR (2'b11) for out-of-range
+//   (decode error) — memory left untouched on an out-of-range write
 // - Byte-enables (WSTRB) honored on writes
 //
 // Intentionally simple and spec-clean so it is a good DUT for a UVM testbench:

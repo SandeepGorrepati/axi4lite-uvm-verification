@@ -10,6 +10,8 @@ a sequence library, and a **layer of concurrent SVA** bound to the interface.
 
 ## Architecture
 
+![AXI4-Lite UVM environment](docs/diagrams/axi_uvm_env.png)
+
 ```
                          +------------------- axi4lite_env --------------------+
                          |                                                     |
@@ -24,6 +26,22 @@ a sequence library, and a **layer of concurrent SVA** bound to the interface.
    SVA assertions are bound inside axi4lite_if (handshake stability, no-X,
    OKAY response, bounded write/read completion).
 ```
+
+## Waveform (real simulation output)
+
+![AXI4-Lite protocol waveform](docs/waveforms/axi4lite_protocol.png)
+
+Captured from an actual simulation of the DUT (`axi4lite_slave`) driven through a
+full-word write, a byte-strobe write, read-backs, and an **out-of-range access that
+returns DECERR** (`bresp`/`rresp` = `2'b11`). Generated from the simulator's VCD —
+the same signals the **11 concurrent SVA assertions** monitor (handshake stability,
+no-X on address/data/strobe, legal response codes, bounded completion).
+
+**Failing case (bug injected).** With `+define+INJECT_BRESP_ERR`, the slave returns
+`SLVERR` (`bresp`/`rresp` = `2`) on a normal access — the bound assertions
+`A_BRESP_LEGAL` / `A_RRESP_LEGAL` and the scoreboard catch it:
+
+![AXI4-Lite failing-case waveform](docs/waveforms/axi_failing_slverr.png)
 
 ## File map
 

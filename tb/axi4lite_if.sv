@@ -86,11 +86,13 @@ interface axi4lite_if #(
         (rvalid && !rready |=> rvalid && $stable(rdata) && $stable(rresp))
         else $error("[SVA] R channel changed/dropped before RREADY");
 
-    // 4. Responses must be OKAY (this slave never errors)
-    A_BRESP_OKAY : assert property (bvalid |-> bresp == 2'b00)
-        else $error("[SVA] BRESP not OKAY");
-    A_RRESP_OKAY : assert property (rvalid |-> rresp == 2'b00)
-        else $error("[SVA] RRESP not OKAY");
+    // 4. Responses must be a LEGAL AXI4-Lite code for this slave: OKAY (in-range) or
+    //    DECERR (out-of-range). SLVERR (2'b10) and the reserved code (2'b01) are illegal
+    //    here, so +define+INJECT_BRESP_ERR (which forces SLVERR) still trips these.
+    A_BRESP_LEGAL : assert property (bvalid |-> (bresp inside {2'b00, 2'b11}))
+        else $error("[SVA] BRESP illegal (not OKAY/DECERR): %b", bresp);
+    A_RRESP_LEGAL : assert property (rvalid |-> (rresp inside {2'b00, 2'b11}))
+        else $error("[SVA] RRESP illegal (not OKAY/DECERR): %b", rresp);
 
     // 5. No spurious responses: BVALID only after an accepted AW and W
     //    (bounded liveness: every accepted write eventually produces BVALID)

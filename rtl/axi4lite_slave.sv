@@ -50,7 +50,9 @@ module axi4lite_slave #(
 
     localparam int ADDR_LSB = $clog2(DATA_WIDTH/8);          // byte offset bits
     localparam int MEM_AW   = $clog2(MEM_WORDS);             // word index bits
-    localparam logic [1:0] RESP_OKAY = 2'b00;
+    localparam logic [1:0] RESP_OKAY   = 2'b00;
+    localparam logic [1:0] RESP_DECERR = 2'b11;              // out-of-range decode error
+    localparam int unsigned VALID_BYTES = MEM_WORDS * (DATA_WIDTH/8); // in-range byte span
 
     logic [DATA_WIDTH-1:0] mem [0:MEM_WORDS-1];
 
@@ -128,23 +130,31 @@ module axi4lite_slave #(
             bresp  <= RESP_OKAY;
         end else begin
             if (do_write) begin
+                if (awaddr_q >= VALID_BYTES) begin
+                    // Out-of-range write: decode error, memory left untouched.
+                    bresp  <= RESP_DECERR;
+                end else begin
 `ifdef INJECT_WSTRB_BUG
-                // -------- DELIBERATE BUG (enable with +define+INJECT_WSTRB_BUG) --------
-                // Ignores WSTRB and writes the full 32-bit word on every write.
-                // A partial-strobe write should only update selected bytes; this
-                // corrupts the others. The scoreboard's reference model honors
-                // WSTRB, so the byte-strobe directed test produces a READ MISMATCH,
-                // and you can see exactly which bytes differ. Demonstrates the
-                // testbench actually catches a real RTL bug. See README "Bug Injection".
-                mem[word_index(awaddr_q)] <= wdata_q;
+                    // -------- DELIBERATE BUG (enable with +define+INJECT_WSTRB_BUG) ------
+                    // Ignores WSTRB and writes the full 32-bit word on every write.
+                    // A partial-strobe write should only update selected bytes; this
+                    // corrupts the others. The scoreboard's reference model honors WSTRB,
+                    // so the byte-strobe directed test produces a READ MISMATCH. See README.
+                    mem[word_index(awaddr_q)] <= wdata_q;
 `else
-                for (b = 0; b < DATA_WIDTH/8; b++) begin
-                    if (wstrb_q[b])
-                        mem[word_index(awaddr_q)][b*8 +: 8] <= wdata_q[b*8 +: 8];
-                end
+                    for (b = 0; b < DATA_WIDTH/8; b++) begin
+                        if (wstrb_q[b])
+                            mem[word_index(awaddr_q)][b*8 +: 8] <= wdata_q[b*8 +: 8];
+                    end
 `endif
+`ifdef INJECT_BRESP_ERR
+                    bresp <= 2'b10;   // BUG (+define+INJECT_BRESP_ERR): SLVERR on a normal
+                                      // write -> bound SVA A_BRESP_LEGAL fires.
+`else
+                    bresp <= RESP_OKAY;
+`endif
+                end
                 bvalid <= 1'b1;
-                bresp  <= RESP_OKAY;
             end else if (bvalid && bready) begin
                 bvalid <= 1'b0;
             end
@@ -164,8 +174,19 @@ module axi4lite_slave #(
             // Accept a read address when not currently returning data
             if (arvalid && !arready && !rvalid) begin
                 arready <= 1'b1;
-                rdata   <= mem[word_index(araddr)];
-                rresp   <= RESP_OKAY;
+                if (araddr >= VALID_BYTES) begin
+                    // Out-of-range read: decode error, return zero data.
+                    rdata <= '0;
+                    rresp <= RESP_DECERR;
+                end else begin
+                    rdata <= mem[word_index(araddr)];
+`ifdef INJECT_BRESP_ERR
+                    rresp <= 2'b10;  // BUG (+define+INJECT_BRESP_ERR): SLVERR on a normal
+                                     // read -> SVA A_RRESP_LEGAL fires.
+`else
+                    rresp <= RESP_OKAY;
+`endif
+                end
             end else begin
                 arready <= 1'b0;
             end

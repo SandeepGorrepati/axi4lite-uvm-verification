@@ -98,3 +98,43 @@ class axi4lite_directed_seq extends axi4lite_base_seq;
         do_write(32'h0000_0020, 32'h0000_00AA, 4'h1); do_read(32'h0000_0020);
     endtask
 endclass
+
+//------------------------------------------------------------------------------
+// Error-path: out-of-range accesses must return DECERR (and not corrupt memory).
+// The scoreboard predicts DECERR for addr >= 0x400 and checks the response.
+//------------------------------------------------------------------------------
+class axi4lite_error_seq extends axi4lite_base_seq;
+    `uvm_object_utils(axi4lite_error_seq)
+
+    rand int unsigned num_txns;
+    constraint c_num { soft num_txns inside {[6:12]}; }
+
+    function new(string name = "axi4lite_error_seq"); super.new(name); endfunction
+
+    virtual task body();
+        // directed out-of-range corners (write + read) -> expect DECERR
+        foreach_oob_pair(32'h0000_0400);
+        foreach_oob_pair(32'h0000_8000);
+        foreach_oob_pair(32'h0000_FFFC);
+        // randomized out-of-range traffic
+        for (int i = 0; i < num_txns; i++) begin
+            axi4lite_seq_item t = axi4lite_seq_item::type_id::create("t");
+            start_item(t);
+            assert(t.randomize() with { oob == 1'b1; });
+            finish_item(t);
+        end
+    endtask
+
+    task foreach_oob_pair(bit [31:0] a);
+        axi4lite_seq_item wr = axi4lite_seq_item::type_id::create("wr");
+        start_item(wr);
+        assert(wr.randomize() with { dir == axi4lite_seq_item::AXI_WRITE; oob == 1'b1; addr == a; });
+        finish_item(wr);
+        begin
+            axi4lite_seq_item rd = axi4lite_seq_item::type_id::create("rd");
+            start_item(rd);
+            assert(rd.randomize() with { dir == axi4lite_seq_item::AXI_READ; oob == 1'b1; addr == a; });
+            finish_item(rd);
+        end
+    endtask
+endclass

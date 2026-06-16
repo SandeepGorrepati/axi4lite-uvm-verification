@@ -73,13 +73,28 @@ Tests:
 
 ```
 UVM_INFO ... [SCB] ============ SCOREBOARD SUMMARY ============
-UVM_INFO ... [SCB] writes=64 reads=46 MATCH=46 MISMATCH=0
+UVM_INFO ... [SCB] writes=.. reads=.. MATCH=.. MISMATCH=0 RESP_MISMATCH=0
 UVM_INFO ... [SCB] RESULT: PASS
 UVM_INFO ... [COV] Functional coverage = 100.00%
 UVM_INFO ... [TEST_DONE] ... UVM_ERROR :    0  UVM_FATAL :    0
 ```
-(Exact counts vary with the random seed; MISMATCH must be 0, coverage should
-reach 100% of the defined coverpoints with the regression test.)
+(Exact counts vary with the random seed; MISMATCH and RESP_MISMATCH must be 0, and
+coverage reaches 100% of the defined coverpoints with the regression test.)
+
+## Error-path verification (DECERR)
+
+Beyond happy-path data checking, the environment verifies the **decode-error path**:
+- The slave returns **DECERR** (`2'b11`) for any out-of-range access (`addr >= 0x400`)
+  and leaves memory untouched.
+- The transaction has an `oob` knob; `axi4lite_error_seq` drives directed + randomized
+  out-of-range writes and reads.
+- The scoreboard **predicts the response from the address** (in-range → OKAY,
+  out-of-range → DECERR), checks it, and only updates/compares the data model on OKAY.
+- Coverage adds a `decerr` response bin and an `oob` address bin (both closed by the
+  error sequence); the SVA `A_BRESP_LEGAL`/`A_RRESP_LEGAL` allow only OKAY/DECERR.
+
+This shows response-channel verification and reference-model prediction, not just
+data integrity — a step up in DV maturity.
 
 ## Bug Injection & Debug Story (the part interviewers care about)
 
@@ -112,6 +127,15 @@ scoreboard diff → form a hypothesis → confirm.*
 Run **without** the define = clean PASS. Run **with** it = the scoreboard catches the
 bug on the exact transaction. That contrast is the artifact to screenshot.
 
+**Second injectable bug — protocol error (assertion catch):** compile with
+`+define+INJECT_BRESP_ERR` and the slave returns **SLVERR** on a normal read/write.
+The bound concurrent assertions `A_BRESP_OKAY` / `A_RRESP_OKAY` fire immediately:
+```
+"[SVA] BRESP not OKAY"
+```
+This shows the **assertion layer** (not just the scoreboard) catching an illegal
+protocol response — two independent checking mechanisms, two classes of bug caught.
+
 ## Coverage closure
 
 The `axi4lite_regression_test` is built to **close 100% of the defined functional
@@ -135,9 +159,19 @@ report -detail`) as proof.
 - Assertion-based verification (concurrent SVA) for protocol legality.
 - Reusable agent and a layered sequence library.
 
+## Roadmap — top-tier extensions (planned)
+The next upgrades that push this from strong to top-tier:
+- ✅ **DECERR error-path feature** — DONE (out-of-range → DECERR, error sequence,
+  scoreboard response-prediction, resp/oob coverage, legal-response SVA).
+- ✅ **RAL** — DONE (`uvm_reg_block` + `uvm_mem` + `uvm_reg_adapter` in
+  `tb/axi4lite_ral.sv`; run `+UVM_TESTNAME=axi4lite_ral_test`).
+- **Random back-pressure** — wait-states on AWREADY/WREADY/ARREADY + outstanding/
+  interleaved transactions.
+- **Gate-level / FPGA** smoke of the DUT.
+
 ## Notes / honesty
 - Tested against UVM 1.2 semantics. First compile on a new tool version may need
   trivial tweaks (e.g., `+define`s); the methodology and structure are the point.
-- The slave always returns OKAY by design — error-injection (SLVERR/DECERR) and a
-  RAL register model are the natural next extensions.
+- Two injectable bugs are included (`INJECT_WSTRB_BUG` = data, `INJECT_BRESP_ERR` =
+  protocol) to demonstrate the scoreboard and the SVA layer each catching defects.
 ```

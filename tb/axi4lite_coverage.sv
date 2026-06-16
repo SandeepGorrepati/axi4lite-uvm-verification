@@ -20,6 +20,7 @@ class axi4lite_coverage extends uvm_subscriber #(axi4lite_seq_item);
             bins low  = {[32'h0000_0000 : 32'h0000_00FC]};
             bins mid  = {[32'h0000_0100 : 32'h0000_02FC]};
             bins high = {[32'h0000_0300 : 32'h0000_03FC]};
+            bins oob  = {[32'h0000_0400 : 32'h0000_FFFC]};   // out-of-range (DECERR)
         }
 
         cp_strb : coverpoint tr.strb iff (tr.dir == axi4lite_seq_item::AXI_WRITE) {
@@ -29,7 +30,8 @@ class axi4lite_coverage extends uvm_subscriber #(axi4lite_seq_item);
         }
 
         cp_resp : coverpoint tr.resp {
-            bins okay = {2'b00};
+            bins okay   = {2'b00};
+            bins decerr = {2'b11};
         }
 
         x_dir_range : cross cp_dir, cp_addr_range;

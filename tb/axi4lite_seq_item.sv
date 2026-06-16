@@ -10,11 +10,17 @@ class axi4lite_seq_item extends uvm_sequence_item;
     rand bit [31:0]     addr;
     rand bit [31:0]     data;     // write data (stimulus) / read data (result)
     rand bit [3:0]      strb;
-    bit [1:0]           resp;     // captured response (OKAY expected)
+    rand bit            oob;      // 1 = generate an out-of-range (DECERR) address
+    bit [1:0]           resp;     // captured response (OKAY / DECERR)
 
-    // Memory is 256 words; keep addresses word-aligned and in range.
+    // Memory is 256 words (0x000-0x3FC). Addresses are word-aligned. By default
+    // transactions are in-range; set oob=1 to target the out-of-range region.
     constraint c_addr_aligned { addr[1:0] == 2'b00; }
-    constraint c_addr_range   { addr < 32'h0000_0400; }   // 256 * 4 bytes
+    constraint c_oob_default  { soft oob == 1'b0; }
+    constraint c_addr_range {
+        (oob == 1'b0) -> (addr < 32'h0000_0400);
+        (oob == 1'b1) -> (addr inside {[32'h0000_0400 : 32'h0000_FFFC]});
+    }
     constraint c_strb_full    { soft strb == 4'hF; }       // full-word by default
 
     `uvm_object_utils_begin(axi4lite_seq_item)

@@ -43,6 +43,20 @@ no-X on address/data/strobe, legal response codes, bounded completion).
 
 ![AXI4-Lite failing-case waveform](docs/waveforms/axi_failing_slverr.png)
 
+## Formal verification (proven, not just simulated)
+
+Beyond the UVM/simulation flow, `formal/` **formally proves** the slave's response
+and decode policy with **SymbiYosys + Z3** using **temporal k-induction** — an
+unbounded proof over all reachable states and input sequences. Five properties are
+proven: legal response codes, no spurious responses, correct OKAY/DECERR decode,
+and a stable (never-dropped) handshake. Base case (depth 25) and k-induction both
+**PASS** — see [`formal/PROOF_LOG.txt`](formal/PROOF_LOG.txt) and
+[`formal/README.md`](formal/README.md).
+
+```bash
+sby -f formal/axi4lite_resp_fv.sby      # or the manual yosys-smtbmc flow in formal/README.md
+```
+
 ## File map
 
 | File | Role |

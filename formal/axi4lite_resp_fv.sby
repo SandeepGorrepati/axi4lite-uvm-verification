@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 25
+
+[engines]
+smtbmc z3
+
+[script]
+read_verilog -sv -formal axi4lite_resp_fv.sv
+prep -top axi4lite_resp_fv
+
+[files]
+axi4lite_resp_fv.sv

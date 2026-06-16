@@ -1,0 +1,20 @@
+# Formal proof log — axi4lite_resp_fv
+# Tools: Yosys 0.9 + yosys-smtbmc + Z3 4.16.0
+# Date: 2026-06-16 12:20 UTC
+
+## BMC base case (no assertion fails within bound):
+##   0:00:00  Solver: z3
+##   0:00:00  Checking assertions in step 0..
+##   0:00:00  Checking assertions in step 24..
+##   0:00:00  Status: PASSED
+
+## Temporal k-induction (unbounded proof):
+##   0:00:00  Solver: z3
+##   0:00:00  Trying induction in step 25..
+##   0:00:00  Trying induction in step 24..
+##   0:00:00  Trying induction in step 23..
+##   0:00:00  Temporal induction successful.
+##   0:00:00  Status: PASSED
+
+## Result: all 5 properties (P1 legal-resp, P2 no-spurious, P3 in-range=OKAY,
+##         P4 oob=DECERR, P5 stable-handshake) PROVEN.

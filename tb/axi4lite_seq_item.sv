@@ -11,6 +11,11 @@ class axi4lite_seq_item extends uvm_sequence_item;
     rand bit [31:0]     data;     // write data (stimulus) / read data (result)
     rand bit [3:0]      strb;
     rand bit            oob;      // 1 = generate an out-of-range (DECERR) address
+    rand int unsigned aw_delay, w_delay, b_delay, r_delay;
+    constraint c_channel_delay {
+        aw_delay inside {[0:6]}; w_delay inside {[0:6]};
+        b_delay inside {[0:6]}; r_delay inside {[0:6]};
+    }
     bit [1:0]           resp;     // captured response (OKAY / DECERR)
 
     // Memory is 256 words (0x000-0x3FC). Addresses are word-aligned. By default
@@ -41,3 +46,4 @@ class axi4lite_seq_item extends uvm_sequence_item;
     endfunction
 
 endclass
+

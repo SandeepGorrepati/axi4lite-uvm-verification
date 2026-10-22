@@ -1,5 +1,10 @@
 name: Open-source UVM regression
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    paths: ['rtl/**', 'tb/**', 'scripts/**', '.github/workflows/**', 'formal/**']
+  pull_request:
+    paths: ['rtl/**', 'tb/**', 'scripts/**', '.github/workflows/**', 'formal/**']
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

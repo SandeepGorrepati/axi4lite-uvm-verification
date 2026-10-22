@@ -47,31 +47,31 @@ class axi4lite_driver extends uvm_driver #(axi4lite_seq_item);
     // AXI4-Lite write: drive AW and W concurrently, then accept B response.
     //--------------------------------------------------------------------------
     task drive_write(axi4lite_seq_item tr);
-        // Launch address and data phases together
-        vif.drv_cb.awaddr  <= tr.addr;
-        vif.drv_cb.awvalid <= 1'b1;
-        vif.drv_cb.wdata   <= tr.data;
-        vif.drv_cb.wstrb   <= tr.strb;
-        vif.drv_cb.wvalid  <= 1'b1;
-        vif.drv_cb.bready  <= 1'b1;
-
-        // Drop AW once it is accepted
+        // AW and W are independent; hold BREADY low until the response is observed.
+        vif.drv_cb.bready <= 0;
         fork
             begin
-                do @(vif.drv_cb); while (!vif.drv_cb.awready);
-                vif.drv_cb.awvalid <= 1'b0;
+                repeat(tr.aw_delay) @(vif.drv_cb);
+                vif.drv_cb.awaddr <= tr.addr;
+                vif.drv_cb.awvalid <= 1;
+                do @(vif.drv_cb); while(!vif.drv_cb.awready);
+                vif.drv_cb.awvalid <= 0;
             end
             begin
-                do @(vif.drv_cb); while (!vif.drv_cb.wready);
-                vif.drv_cb.wvalid <= 1'b0;
+                repeat(tr.w_delay) @(vif.drv_cb);
+                vif.drv_cb.wdata <= tr.data;
+                vif.drv_cb.wstrb <= tr.strb;
+                vif.drv_cb.wvalid <= 1;
+                do @(vif.drv_cb); while(!vif.drv_cb.wready);
+                vif.drv_cb.wvalid <= 0;
             end
         join
-
-        // Wait for the write response
-        do @(vif.drv_cb); while (!vif.drv_cb.bvalid);
+        do @(vif.drv_cb); while(!vif.drv_cb.bvalid);
+        repeat(tr.b_delay) @(vif.drv_cb);
         tr.resp = vif.drv_cb.bresp;
+        vif.drv_cb.bready <= 1;
         @(vif.drv_cb);
-        vif.drv_cb.bready <= 1'b0;
+        vif.drv_cb.bready <= 0;
     endtask
 
     //--------------------------------------------------------------------------
@@ -80,12 +80,14 @@ class axi4lite_driver extends uvm_driver #(axi4lite_seq_item);
     task drive_read(axi4lite_seq_item tr);
         vif.drv_cb.araddr  <= tr.addr;
         vif.drv_cb.arvalid <= 1'b1;
-        vif.drv_cb.rready  <= 1'b1;
+        vif.drv_cb.rready  <= 1'b0;
 
         do @(vif.drv_cb); while (!vif.drv_cb.arready);
         vif.drv_cb.arvalid <= 1'b0;
 
         do @(vif.drv_cb); while (!vif.drv_cb.rvalid);
+        repeat(tr.r_delay) @(vif.drv_cb);
+        vif.drv_cb.rready <= 1;
         tr.data = vif.drv_cb.rdata;     // result returned to the sequence
         tr.resp = vif.drv_cb.rresp;
         @(vif.drv_cb);
@@ -93,3 +95,4 @@ class axi4lite_driver extends uvm_driver #(axi4lite_seq_item);
     endtask
 
 endclass
+

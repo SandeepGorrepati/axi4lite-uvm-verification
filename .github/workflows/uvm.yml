@@ -43,10 +43,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          build/uvm/uvm_sim +UVM_TESTNAME=axi4lite_regression_test +verilator+seed+20261022 2>&1 | tee uvm-regression.log
-          grep -E 'UVM_ERROR[[:space:]]*:[[:space:]]*0' uvm-regression.log
-          grep -E 'UVM_FATAL[[:space:]]*:[[:space:]]*0' uvm-regression.log
-          grep 'RESULT: PASS' uvm-regression.log
+          for test in axi4lite_sanity_test axi4lite_regression_test axi4lite_ral_test; do
+            build/uvm/uvm_sim +UVM_TESTNAME="$test" +verilator+seed+20261022 2>&1 | tee "uvm-$test.log"
+            grep -E 'UVM_ERROR[[:space:]]*:[[:space:]]*0' "uvm-$test.log"
+          grep -E 'UVM_FATAL[[:space:]]*:[[:space:]]*0' "uvm-$test.log"
+            grep 'RESULT: PASS' "uvm-$test.log"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

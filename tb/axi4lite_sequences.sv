@@ -25,6 +25,7 @@ class axi4lite_write_read_seq extends axi4lite_base_seq;
         bit [31:0] last_addr;
         for (int i = 0; i < num_pairs; i++) begin
             axi4lite_seq_item wr = axi4lite_seq_item::type_id::create("wr");
+            axi4lite_seq_item rd;
             // WRITE
             start_item(wr);
             assert(wr.randomize() with { dir == axi4lite_seq_item::AXI_WRITE; });
@@ -33,7 +34,7 @@ class axi4lite_write_read_seq extends axi4lite_base_seq;
             `uvm_info("SEQ", $sformatf("WRITE %s", wr.convert2string()), UVM_MEDIUM)
 
             // READ BACK same address
-            axi4lite_seq_item rd = axi4lite_seq_item::type_id::create("rd");
+            rd = axi4lite_seq_item::type_id::create("rd");
             start_item(rd);
             assert(rd.randomize() with { dir == axi4lite_seq_item::AXI_READ;
                                          addr == last_addr; });
@@ -135,6 +136,22 @@ class axi4lite_error_seq extends axi4lite_base_seq;
             start_item(rd);
             assert(rd.randomize() with { dir == axi4lite_seq_item::AXI_READ; oob == 1'b1; addr == a; });
             finish_item(rd);
+        end
+    endtask
+endclass
+
+
+// Prime all words so random reads compare defined data in four-state simulators.
+class axi4lite_init_seq extends axi4lite_base_seq;
+    `uvm_object_utils(axi4lite_init_seq)
+    function new(string name="axi4lite_init_seq"); super.new(name); endfunction
+    task body();
+        for(int i=0;i<256;i++) begin
+            axi4lite_seq_item t=axi4lite_seq_item::type_id::create("init_word");
+            start_item(t);
+            t.dir=axi4lite_seq_item::AXI_WRITE; t.addr=i*4;
+            t.data=0; t.strb=15; t.oob=0;
+            finish_item(t);
         end
     endtask
 endclass

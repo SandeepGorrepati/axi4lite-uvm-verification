@@ -46,17 +46,20 @@ class axi4lite_regression_test extends axi4lite_base_test;
     function new(string name, uvm_component parent); super.new(name, parent); endfunction
 
     task run_phase(uvm_phase phase);
+        axi4lite_init_seq init_seq = axi4lite_init_seq::type_id::create("init_seq");
         axi4lite_directed_seq   d_seq   = axi4lite_directed_seq::type_id::create("d_seq");
         axi4lite_write_read_seq wr_seq  = axi4lite_write_read_seq::type_id::create("wr_seq");
         axi4lite_random_seq     rnd_seq = axi4lite_random_seq::type_id::create("rnd_seq");
         axi4lite_error_seq      err_seq = axi4lite_error_seq::type_id::create("err_seq");
 
         phase.raise_objection(this);
+        init_seq.start(env.agent.sqr);
         d_seq.start(env.agent.sqr);
         assert(wr_seq.randomize() with { num_pairs == 16; });
         wr_seq.start(env.agent.sqr);
         assert(rnd_seq.randomize() with { num_txns == 40; });
         rnd_seq.start(env.agent.sqr);
+        assert(err_seq.randomize() with {num_txns == 12;});
         err_seq.start(env.agent.sqr);          // out-of-range -> DECERR error path
         phase.phase_done.set_drain_time(this, 200ns);
         phase.drop_objection(this);
@@ -104,3 +107,4 @@ class axi4lite_ral_test extends axi4lite_base_test;
         phase.drop_objection(this);
     endtask
 endclass
+

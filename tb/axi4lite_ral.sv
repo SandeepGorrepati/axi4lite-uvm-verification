@@ -28,8 +28,8 @@ class axi4lite_reg_block extends uvm_reg_block;
     virtual function void build();
         default_map = create_map("default_map", 0, 4, UVM_LITTLE_ENDIAN);
         // 256 entries, 32-bit each, RW
-        mem = uvm_mem::type_id::create("mem");
-        mem.configure(this, 256, 32, "RW", 0);
+        mem = new("mem", 256, 32, "RW", UVM_NO_COVERAGE);
+        mem.configure(this);
         default_map.add_mem(mem, 'h0, "RW");
         lock_model();
     endfunction
@@ -74,3 +74,4 @@ class axi4lite_reg_adapter extends uvm_reg_adapter;
         rw.status = (t.resp == 2'b00) ? UVM_IS_OK : UVM_NOT_OK;
     endfunction
 endclass
+

@@ -1,0 +1,34 @@
+name: Protocol regression
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Oracle and real-DUT simulation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/gen_vectors.py
+          iverilog -g2012 -s tb_protocol -o build/protocol rtl/axi4lite_slave.sv tb/tb_protocol.sv
+          vvp build/protocol | tee protocol.log
+      - name: Prove checker detects injected byte-strobe bug
+        shell: bash
+        run: |
+          set -euo pipefail
+          iverilog -g2012 -DINJECT_WSTRB_BUG -s tb_protocol -o build/mutant rtl/axi4lite_slave.sv tb/tb_protocol.sv
+          if vvp build/mutant > mutation.log 2>&1; then
+            cat mutation.log
+            echo 'ERROR: mutant escaped checker'
+            exit 1
+          fi
+          grep 'R response' mutation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protocol-evidence
+          path: '*.log'

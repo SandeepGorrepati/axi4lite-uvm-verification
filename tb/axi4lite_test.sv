@@ -46,6 +46,7 @@ class axi4lite_regression_test extends axi4lite_base_test;
     function new(string name, uvm_component parent); super.new(name, parent); endfunction
 
     task run_phase(uvm_phase phase);
+        axi4lite_timing_seq timing_seq=axi4lite_timing_seq::type_id::create("timing_seq");
         axi4lite_init_seq init_seq = axi4lite_init_seq::type_id::create("init_seq");
         axi4lite_directed_seq   d_seq   = axi4lite_directed_seq::type_id::create("d_seq");
         axi4lite_write_read_seq wr_seq  = axi4lite_write_read_seq::type_id::create("wr_seq");
@@ -55,6 +56,7 @@ class axi4lite_regression_test extends axi4lite_base_test;
         phase.raise_objection(this);
         init_seq.start(env.agent.sqr);
         d_seq.start(env.agent.sqr);
+        timing_seq.start(env.agent.sqr);
         assert(wr_seq.randomize() with { num_pairs == 16; });
         wr_seq.start(env.agent.sqr);
         assert(rnd_seq.randomize() with { num_txns == 40; });
@@ -96,7 +98,9 @@ class axi4lite_ral_test extends axi4lite_base_test;
         phase.raise_objection(this);
         for (int i = 0; i < 8; i++) begin
             regmodel.mem.write(status, i, 32'hA000_0000 + i, .parent(null));
+            if(status != UVM_IS_OK) `uvm_fatal("RAL", "write status failure")
             regmodel.mem.read (status, i, rdata,            .parent(null));
+            if(status != UVM_IS_OK) `uvm_fatal("RAL", "read status failure")
             if (rdata !== (32'hA000_0000 + i))
                 `uvm_error("RAL", $sformatf("mem[%0d] expected 0x%08h got 0x%08h",
                            i, 32'hA000_0000 + i, rdata))

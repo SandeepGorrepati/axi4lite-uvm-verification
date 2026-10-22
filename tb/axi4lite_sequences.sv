@@ -155,3 +155,30 @@ class axi4lite_init_seq extends axi4lite_base_seq;
         end
     endtask
 endclass
+
+// All 16 masks with simultaneous, AW-first and W-first traffic, and response stalls.
+class axi4lite_timing_seq extends axi4lite_base_seq;
+    `uvm_object_utils(axi4lite_timing_seq)
+    function new(string name="axi4lite_timing_seq"); super.new(name); endfunction
+    task body();
+        for(int profile=0;profile<3;profile++) begin
+            for(int mask=0;mask<16;mask++) begin
+                axi4lite_seq_item wr=axi4lite_seq_item::type_id::create("timed_wr");
+                axi4lite_seq_item rd=axi4lite_seq_item::type_id::create("timed_rd");
+                start_item(wr);
+                wr.dir=axi4lite_seq_item::AXI_WRITE;
+                wr.addr=(profile==0)?0:((profile==1)?32'h100:32'h3fc);
+                wr.data=32'ha5c3f00f ^ mask;
+                wr.strb=mask[3:0];
+                wr.aw_delay=(profile==2)?6:0;
+                wr.w_delay=(profile==1)?6:0;
+                wr.b_delay=6;
+                finish_item(wr);
+                start_item(rd);
+                rd.dir=axi4lite_seq_item::AXI_READ; rd.addr=wr.addr;
+                rd.r_delay=6;
+                finish_item(rd);
+            end
+        end
+    endtask
+endclass

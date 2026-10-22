@@ -6,7 +6,8 @@
 
 interface axi4lite_if #(
     parameter int ADDR_WIDTH = 32,
-    parameter int DATA_WIDTH = 32
+    parameter int DATA_WIDTH = 32,
+    parameter int MAX_RESPONSE_CYCLES = 32
 )(input logic aclk, input logic aresetn);
 
     // Write address
@@ -55,7 +56,7 @@ interface axi4lite_if #(
     modport MON (clocking mon_cb, input aclk, input aresetn);
 
     //==========================================================================
-    // SVA — concurrent protocol assertions
+    // SVA â€” concurrent protocol assertions
     // These fire in any SVA-capable simulator (Questa / VCS / Xcelium).
     //==========================================================================
     // synopsys translate_off
@@ -94,16 +95,32 @@ interface axi4lite_if #(
     A_RRESP_LEGAL : assert property (rvalid |-> (rresp inside {2'b00, 2'b11}))
         else $error("[SVA] RRESP illegal (not OKAY/DECERR): %b", rresp);
 
-    // 5. No spurious responses: BVALID only after an accepted AW and W
-    //    (bounded liveness: every accepted write eventually produces BVALID)
-    A_WRITE_GETS_BRESP : assert property
-        ((awvalid && awready) ##[1:$] (bvalid && bready))
-        else $error("[SVA] Accepted write never produced a BVALID/BREADY");
+    A_B_STABLE : assert property
+        (bvalid && !bready |=> bvalid && $stable(bresp))
+        else $error("[SVA] B channel changed/dropped before BREADY");
 
-    // 6. Every accepted read address eventually returns read data
+    // Collect independently accepted AW and W. Completion starts only after
+    // both have arrived; BREADY is deliberately excluded from slave liveness.
+    logic aw_seen, w_seen;
+    wire aw_accept = awvalid && awready;
+    wire w_accept = wvalid && wready;
+    wire write_pair = (aw_seen || aw_accept) && (w_seen || w_accept);
+    always_ff @(posedge aclk or negedge aresetn) begin
+        if(!aresetn) begin aw_seen <= 0; w_seen <= 0; end
+        else if(write_pair) begin aw_seen <= 0; w_seen <= 0; end
+        else begin
+            if(aw_accept) aw_seen <= 1;
+            if(w_accept) w_seen <= 1;
+        end
+    end
+    // These bounds are this DUT's verification contract, not AXI requirements.
+    A_WRITE_GETS_BRESP : assert property
+        (write_pair |-> ##[1:MAX_RESPONSE_CYCLES] bvalid)
+        else $error("[SVA] Accepted AW/W pair exceeded response bound");
     A_READ_GETS_RDATA : assert property
-        ((arvalid && arready) |-> ##[1:$] (rvalid))
-        else $error("[SVA] Accepted read never produced RVALID");
+        ((arvalid && arready) |-> ##[1:MAX_RESPONSE_CYCLES] rvalid)
+        else $error("[SVA] Accepted read exceeded response bound");
     // synopsys translate_on
 
 endinterface
+

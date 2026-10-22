@@ -11,9 +11,9 @@ Verification of a 256x32 AXI4-Lite memory slave with independent AW/W acceptance
 | Layer | Implementation | Evidence |
 |---|---|---|
 | Real-DUT protocol regression | Icarus + independent Python byte-memory oracle | 1,075 write/read pairs passed |
-| Checker mutation | `INJECT_WSTRB_BUG` ignores byte enables | Regression must fail on data mismatch; CI confirms detection |
+| Checker mutation | Ignored byte enables and incorrect response status | Both mutants detected by CI |
 | Real-DUT bounded safety | Yosys SAT, actual slave with four-word memory | 24-step bounded check passed; arbitrary legal master timing |
-| UVM | agent, driver, monitor, scoreboard, constrained sequences, covergroups, RAL | See current [regression summary](docs/REGRESSION_SUMMARY.md) |
+| UVM | agent, driver, monitor, scoreboard, constrained sequences, covergroups, RAL | Sanity, regression and RAL PASS; zero UVM errors/fatals |
 | Historical formal model | Separate response-policy model in `axi4lite_resp_fv.sv` | Its historical proof applies only to that model |
 
 ## Reproduce the protocol test for free
@@ -27,6 +27,10 @@ vvp build/protocol
 ```
 
 The deterministic oracle seeds all 256 words, exercises all 16 WSTRB masks, simultaneous/AW-first/W-first channels, response backpressure, out-of-range accesses, alias protection, and complete valid-memory readback. The test also cancels a partial write with reset and checks that no orphan response appears. A watchdog and case-inequality data checks turn failures into nonzero process status. The Python model stores individual bytes; it does not copy the DUT's pending-channel implementation.
+
+## Measured UVM results
+
+On Verilator 5.052 + UVM 2020.3.1, seed 20261022, the full regression observed 344 writes, 108 reads, zero data/response mismatches, and zero UVM_ERROR/UVM_FATAL. The declared covergroup reports 100.00%; sanity reports 72.22% and RAL 38.89%. These percentages cover the defined bins only. The [regression summary](docs/REGRESSION_SUMMARY.md) links the actual run and its limits.
 
 ## UVM architecture and tests
 

@@ -11,6 +11,8 @@ jobs:
   uvm:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      VERILATOR_ROOT: ${{ github.workspace }}/.tools/verilator-src
     steps:
       - uses: actions/checkout@v4
       - name: Install free build dependencies
@@ -19,7 +21,7 @@ jobs:
         id: cache
         with:
           path: .tools
-          key: verilator-5.052-uvm-2020-3.1-v1
+          key: verilator-5.052-uvm-2020.3.1-v2
       - name: Build pinned Verilator and fetch UVM library
         if: steps.cache.outputs.cache-hit != 'true'
         shell: bash
@@ -30,16 +32,20 @@ jobs:
           cd .tools/verilator-src
           autoconf
           ./configure --prefix="$GITHUB_WORKSPACE/.tools/verilator"
-          make -j2
-          make install
+          make -C src -j2 opt
           cd ../..
-          git clone --depth 1 --branch uvm-2020-3.1 https://github.com/verilator/uvm.git .tools/uvm
+          git clone --depth 1 --branch 2020.3.1 https://github.com/accellera-official/uvm-core.git .tools/uvm
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: .tools
+          key: verilator-5.052-uvm-2020.3.1-v2
       - name: Compile real UVM components and interface assertions
         shell: bash
         run: |
           set -euo pipefail
-          .tools/verilator/bin/verilator --version | tee uvm-tool.log
-          .tools/verilator/bin/verilator --binary --timing --assert --coverage -Wno-fatal -j 2 \
+          .tools/verilator-src/bin/verilator --version | tee uvm-tool.log
+          .tools/verilator-src/bin/verilator --binary --timing --assert --coverage -Wno-fatal -j 2 \
             +define+UVM_NO_DPI +incdir+.tools/uvm/src +incdir+tb \
             .tools/uvm/src/uvm_pkg.sv tb/axi4lite_if.sv tb/axi4lite_pkg.sv \
             rtl/axi4lite_slave.sv tb/tb_top.sv --top-module tb_top \
@@ -61,3 +67,4 @@ jobs:
           path: |
             uvm-*.log
             coverage.dat
+

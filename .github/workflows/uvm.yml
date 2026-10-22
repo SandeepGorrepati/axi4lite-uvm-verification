@@ -1,0 +1,56 @@
+name: Open-source UVM regression
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  uvm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install free build dependencies
+        run: sudo apt-get update && sudo apt-get install -y autoconf bison flex g++ help2man libfl-dev z3
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: .tools
+          key: verilator-5.052-uvm-2020-3.1-v1
+      - name: Build pinned Verilator and fetch UVM library
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .tools
+          git clone --depth 1 --branch v5.052 https://github.com/verilator/verilator.git .tools/verilator-src
+          cd .tools/verilator-src
+          autoconf
+          ./configure --prefix="$GITHUB_WORKSPACE/.tools/verilator"
+          make -j2
+          make install
+          cd ../..
+          git clone --depth 1 --branch uvm-2020-3.1 https://github.com/verilator/uvm.git .tools/uvm
+      - name: Compile real UVM components and interface assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          .tools/verilator/bin/verilator --version | tee uvm-tool.log
+          .tools/verilator/bin/verilator --binary --timing --assert --coverage -Wno-fatal -j 2 \
+            +define+UVM_NO_DPI +incdir+.tools/uvm/src +incdir+tb \
+            .tools/uvm/src/uvm_pkg.sv tb/axi4lite_if.sv tb/axi4lite_pkg.sv \
+            rtl/axi4lite_slave.sv tb/tb_top.sv --top-module tb_top \
+            --Mdir build/uvm -o uvm_sim 2>&1 | tee uvm-build.log
+      - name: UVM regression with zero-error and scoreboard gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          build/uvm/uvm_sim +UVM_TESTNAME=axi4lite_regression_test +verilator+seed+20261022 2>&1 | tee uvm-regression.log
+          grep -E 'UVM_ERROR[[:space:]]*:[[:space:]]*0' uvm-regression.log
+          grep -E 'UVM_FATAL[[:space:]]*:[[:space:]]*0' uvm-regression.log
+          grep 'RESULT: PASS' uvm-regression.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uvm-evidence
+          path: |
+            uvm-*.log
+            coverage.dat

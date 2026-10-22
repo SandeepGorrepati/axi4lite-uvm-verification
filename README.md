@@ -1,221 +1,59 @@
-# AXI4-Lite UVM Verification Environment
+# AXI4-Lite verification: UVM, protocol simulation, and bounded formal
 
-![RTL Lint](https://github.com/SandeepGorrepati/axi4lite-uvm-verification/actions/workflows/lint.yml/badge.svg)
+![Protocol regression](https://github.com/SandeepGorrepati/axi4lite-uvm-verification/actions/workflows/regression.yml/badge.svg)
+![DUT bounded formal](https://github.com/SandeepGorrepati/axi4lite-uvm-verification/actions/workflows/formal.yml/badge.svg)
+![UVM](https://github.com/SandeepGorrepati/axi4lite-uvm-verification/actions/workflows/uvm.yml/badge.svg)
 
-A complete, industry-style **UVM** testbench verifying an AXI4-Lite slave with an
-internal word-addressable memory. This is a real UVM environment — `uvm_env`,
-`uvm_agent`, `uvm_sequencer`, `uvm_driver`, `uvm_monitor`, `uvm_scoreboard`
-(reference-model based), a functional-coverage subscriber with **covergroups**,
-a sequence library, and a **layer of concurrent SVA** bound to the interface.
+Verification of a 256x32 AXI4-Lite memory slave with independent AW/W acceptance, byte strobes, and OKAY/DECERR responses. Evidence is separated by execution method: the free protocol test is not presented as a UVM run, and a policy-model proof is not presented as proof of the real RTL.
 
-## Architecture
+## Implemented verification layers
 
-![AXI4-Lite UVM environment](docs/diagrams/axi_uvm_env.png)
+| Layer | Implementation | Evidence |
+|---|---|---|
+| Real-DUT protocol regression | Icarus + independent Python byte-memory oracle | 1,075 write/read pairs passed |
+| Checker mutation | `INJECT_WSTRB_BUG` ignores byte enables | Regression must fail on data mismatch; CI confirms detection |
+| Real-DUT bounded safety | Yosys SAT, actual slave with four-word memory | 24-step bounded check passed; arbitrary legal master timing |
+| UVM | agent, driver, monitor, scoreboard, constrained sequences, covergroups, RAL | See current [regression summary](docs/REGRESSION_SUMMARY.md) |
+| Historical formal model | Separate response-policy model in `axi4lite_resp_fv.sv` | Its historical proof applies only to that model |
 
-```
-                         +------------------- axi4lite_env --------------------+
-                         |                                                     |
-  axi4lite_sequence(s) --+--> sequencer --> driver --> [ AXI4-Lite IF ] --> DUT (axi4lite_slave)
-                         |                                   |  |                       |
-                         |                                monitor <--------------------+
-                         |                                   | (analysis port)         
-                         |                  +----------------+----------------+        
-                         |                  v                                 v        
-                         |            scoreboard (reference model)      coverage (covergroups)
-                         +-----------------------------------------------------+
-   SVA assertions are bound inside axi4lite_if (handshake stability, no-X,
-   OKAY response, bounded write/read completion).
-```
+## Reproduce the protocol test for free
 
-## Waveform (real simulation output)
-
-![AXI4-Lite protocol waveform](docs/waveforms/axi4lite_protocol.png)
-
-Captured from an actual simulation of the DUT (`axi4lite_slave`) driven through a
-full-word write, a byte-strobe write, read-backs, and an **out-of-range access that
-returns DECERR** (`bresp`/`rresp` = `2'b11`). Generated from the simulator's VCD —
-the same signals the **11 concurrent SVA assertions** monitor (handshake stability,
-no-X on address/data/strobe, legal response codes, bounded completion).
-
-**Failing case (bug injected).** With `+define+INJECT_BRESP_ERR`, the slave returns
-`SLVERR` (`bresp`/`rresp` = `2`) on a normal access — the bound assertions
-`A_BRESP_LEGAL` / `A_RRESP_LEGAL` and the scoreboard catch it:
-
-![AXI4-Lite failing-case waveform](docs/waveforms/axi_failing_slverr.png)
-
-## Formal verification (proven, not just simulated)
-
-Beyond the UVM/simulation flow, `formal/` **formally proves** the slave's response
-and decode policy with **SymbiYosys + Z3** using **temporal k-induction** — an
-unbounded proof over all reachable states and input sequences. Five properties are
-proven: legal response codes, no spurious responses, correct OKAY/DECERR decode,
-and a stable (never-dropped) handshake. Base case (depth 25) and k-induction both
-**PASS** — see [`formal/PROOF_LOG.txt`](formal/PROOF_LOG.txt) and
-[`formal/README.md`](formal/README.md).
+Install Python 3 and Icarus Verilog. From the repository root:
 
 ```bash
-sby -f formal/axi4lite_resp_fv.sby      # or the manual yosys-smtbmc flow in formal/README.md
+python3 scripts/gen_vectors.py
+iverilog -g2012 -s tb_protocol -o build/protocol rtl/axi4lite_slave.sv tb/tb_protocol.sv
+vvp build/protocol
 ```
 
-## File map
+The deterministic oracle seeds all 256 words, exercises all 16 WSTRB masks, simultaneous/AW-first/W-first channels, response backpressure, out-of-range accesses, alias protection, and complete valid-memory readback. The test also cancels a partial write with reset and checks that no orphan response appears. A watchdog and case-inequality data checks turn failures into nonzero process status. The Python model stores individual bytes; it does not copy the DUT's pending-channel implementation.
 
-| File | Role |
-|---|---|
-| `rtl/axi4lite_slave.sv` | DUT: AXI4-Lite slave, 256 x 32-bit memory, byte strobes, OKAY responses |
-| `tb/axi4lite_if.sv` | Interface, clocking blocks, **bound SVA protocol assertions** |
-| `tb/axi4lite_seq_item.sv` | Transaction with `rand` fields + `constraint` blocks |
-| `tb/axi4lite_sequences.sv` | write-read, constrained-random, and directed-corner sequences |
-| `tb/axi4lite_driver.sv` | Drives AXI4-Lite handshakes from transactions |
-| `tb/axi4lite_monitor.sv` | Reconstructs completed transactions, analysis port |
-| `tb/axi4lite_scoreboard.sv` | Reference-model memory; checks every read |
-| `tb/axi4lite_coverage.sv` | `covergroup`: op, address range, strobe, op×range cross |
-| `tb/axi4lite_agent.sv` / `axi4lite_env.sv` | agent + env wiring |
-| `tb/axi4lite_test.sv` | `sanity` and `regression` tests |
-| `tb/axi4lite_pkg.sv` | package include order |
-| `tb/tb_top.sv` | clock/reset, DUT+IF, `run_test` |
-| `sim/Makefile`, `sim/run.f` | run for Questa / VCS / Xcelium |
+## UVM architecture and tests
 
-## How to run
+The sequencer/driver drives `axi4lite_if`; the passive monitor publishes completed transactions to a scoreboard and functional-coverage subscriber. The scoreboard models byte updates and predicts response codes. The RAL adapter maps a 256-word `uvm_mem` onto bus transactions.
 
-UVM + concurrent SVA + covergroups require a **UVM-capable simulator**
-(Questa, VCS, or Xcelium). Two easy paths:
+- `axi4lite_sanity_test`: ten write/read pairs.
+- `axi4lite_regression_test`: initialize all memory, directed corners, 48 write/read pairs covering every mask in three AW/W timing profiles, 16 additional write/read pairs, 40 random transactions, and directed/random DECERR traffic.
+- `axi4lite_ral_test`: eight RAL write/read pairs with operation-status and data checks.
 
-### Option A — EDA Playground (free, no install)
-1. Go to edaplayground.com, sign in.
-2. Left pane: **UVM/OVM → UVM 1.2**, Simulator: **Mentor Questa** (or Aldec Riviera).
-3. Tick **Open EPWave after run** for waveforms.
-4. Paste each `tb/*.sv` + `rtl/axi4lite_slave.sv` into design/testbench panes
-   (or use the multiple-files layout), set the top to `tb_top`.
-5. Run. Pick a test with the plusarg `+UVM_TESTNAME=axi4lite_regression_test`.
+Randomized AW/W launch delays and B/R response stalls range from zero to six cycles. The default driver serializes complete transactions; the monitor is not claimed to support arbitrary multiple outstanding/interleaved streams. Initialization is required because AXI does not guarantee unwritten memory contains zero. UVM mid-transaction reset recovery is not implemented; reset cancellation is tested in the independent protocol flow.
 
-### Option B — local simulator
-```bash
-cd sim
-make questa TEST=axi4lite_regression_test     # ModelSim/Questa
-# or
-make vcs    TEST=axi4lite_regression_test     # Synopsys VCS
-# or
-make xrun   TEST=axi4lite_regression_test     # Cadence Xcelium
-```
+The interface assertions check known payloads, VALID/payload persistence, legal response codes for this DUT, and bounded completion. Write completion starts after both AW and W are accepted and does not require BREADY. Response bounds are this environment's contract, not an AXI protocol latency requirement.
 
-Tests:
-- `axi4lite_sanity_test` — 10 directed write/read pairs (smoke test).
-- `axi4lite_regression_test` — directed corners + 16 write/read pairs + 40 random
-  transactions (default; drives coverage up).
+The open-source workflow builds pinned Verilator 5.052 and upstream UVM 2020.3.1, enables assertions and coverage, and requires zero UVM_ERROR/UVM_FATAL plus scoreboard PASS. Four-state X/Z behavior is not validated by a two-state simulator. Do not infer coverage closure from a green compile or protocol-only result.
 
-## Expected result (regression test)
+## Actual-DUT formal scope
 
-```
-UVM_INFO ... [SCB] ============ SCOREBOARD SUMMARY ============
-UVM_INFO ... [SCB] writes=.. reads=.. MATCH=.. MISMATCH=0 RESP_MISMATCH=0
-UVM_INFO ... [SCB] RESULT: PASS
-UVM_INFO ... [COV] Functional coverage = 100.00%
-UVM_INFO ... [TEST_DONE] ... UVM_ERROR :    0  UVM_FATAL :    0
-```
-(Illustrative expected output. Exact counts vary with the random seed; MISMATCH and
-RESP_MISMATCH must be 0. **Note:** the scoreboard PASS / 0-error result runs on any
-simulator (incl. Icarus), but the `Functional coverage = 100%` line requires a
-**covergroup-capable simulator (Questa/VCS, e.g. EDA Playground)** — Icarus does not
-score covergroups. Measured coverage closure is demonstrated in the companion
-`ai-mac-array-verification` repo via in-testbench bin tracking.)
+The harness instantiates `axi4lite_slave`, reducing MEM_WORDS to four to keep checks inexpensive. Inputs are symbolic; master VALID/payload persistence is assumed across stalls, initial reset is required, and READY may stall indefinitely. Checks cover legal responses, response transaction credits, and B/R persistence while stalled.
 
-## Error-path verification (DECERR)
+This is bounded safety through 24 steps, not an unbounded proof, AXI certification, memory-data equivalence proof, or liveness proof under arbitrary backpressure. See [formal instructions](formal/README.md).
 
-Beyond happy-path data checking, the environment verifies the **decode-error path**:
-- The slave returns **DECERR** (`2'b11`) for any out-of-range access (`addr >= 0x400`)
-  and leaves memory untouched.
-- The transaction has an `oob` knob; `axi4lite_error_seq` drives directed + randomized
-  out-of-range writes and reads.
-- The scoreboard **predicts the response from the address** (in-range → OKAY,
-  out-of-range → DECERR), checks it, and only updates/compares the data model on OKAY.
-- Coverage adds a `decerr` response bin and an `oob` address bin (both closed by the
-  error sequence); the SVA `A_BRESP_LEGAL`/`A_RRESP_LEGAL` allow only OKAY/DECERR.
+## Bugs corrected during the upgrade
 
-This shows response-channel verification and reference-model prediction, not just
-data integrity — a step up in DV maturity.
+- Replaced a bare write-response SVA sequence with a request-triggered implication and explicit finite bound.
+- Added B response stability; retained R payload stability checks.
+- Corrected UVM sequence declaration order and RAL memory construction.
+- Primed memory before random reads rather than assuming reset initializes the DUT array.
+- Added real channel skew/backpressure and a checker mutation gate.
 
-## Bug Injection & Debug Story (the part interviewers care about)
-
-A testbench is only as good as the bugs it catches. This DUT has a **deliberate,
-toggleable bug** so the environment can prove it finds real RTL defects.
-
-**Enable the bug** by compiling with `+define+INJECT_WSTRB_BUG` (Questa:
-`vlog -sv +define+INJECT_WSTRB_BUG ...`; EDA Playground: add it to the compile args).
-
-**What the bug is:** the write path ignores `WSTRB` and writes the full 32-bit word
-on every write. A partial-strobe write (e.g. `WSTRB=0x1`) should update only byte 0
-and leave the other three bytes intact.
-
-**How the TB catches it:** the directed sequence writes `0xFFFFFFFF` to `0x20`, then
-writes `0x000000AA` with `WSTRB=0x1`. The reference-model scoreboard (which honors
-strobes) predicts `0xFFFFFFAA`. The buggy DUT stores `0x000000AA`, so the read-back
-fails:
-
-```
-UVM_ERROR ... [SCB] READ MISMATCH addr=0x00000020 expected=0xFFFFFFAA got=0x000000AA
-UVM_INFO  ... [SCB] RESULT: FAIL
-```
-
-**Debug walk-through (say this in an interview):** mismatch on a partial-strobe write
-→ compare expected vs actual byte-by-byte → only the strobed byte is correct, the
-others are wrong → points straight at WSTRB handling in the write path → confirmed by
-re-running without the define (PASS). This is the loop: *reproduce → localize from the
-scoreboard diff → form a hypothesis → confirm.*
-
-Run **without** the define = clean PASS. Run **with** it = the scoreboard catches the
-bug on the exact transaction. That contrast is the artifact to screenshot.
-
-**Second injectable bug — protocol error (assertion catch):** compile with
-`+define+INJECT_BRESP_ERR` and the slave returns **SLVERR** on a normal read/write.
-The bound concurrent assertions `A_BRESP_OKAY` / `A_RRESP_OKAY` fire immediately:
-```
-"[SVA] BRESP not OKAY"
-```
-This shows the **assertion layer** (not just the scoreboard) catching an illegal
-protocol response — two independent checking mechanisms, two classes of bug caught.
-
-## Coverage closure
-
-The `axi4lite_regression_test` is built to **close 100% of the defined functional
-coverage**: directed corners + 16 write/read pairs + 40 constrained-random transactions
-hit every bin in `cg_axi` — operation (read/write), address range (low/mid/high),
-byte-strobe (full/single/other), and the operation × address-range cross.
-
-Read the closure number from the report:
-```
-UVM_INFO ... [COV] Functional coverage = 100.00%
-```
-If a bin is unhit, that's the signal to write a targeted directed test for it — the
-core coverage-driven-verification loop. Capture the coverage report (Questa: `coverage
-report -detail`) as proof.
-
-## What this demonstrates (for interviews)
-- Full UVM component hierarchy and phasing.
-- Constrained-random stimulus with `constraint` blocks and `randomize() with`.
-- Reference-model scoreboard (self-checking, not just log-watching).
-- Functional coverage with `covergroup`/`coverpoint`/`cross` and coverage reporting.
-- Assertion-based verification (concurrent SVA) for protocol legality.
-- Reusable agent and a layered sequence library.
-
-## Extensions — status
-
-**Implemented (in this repo):**
-- ✅ **DECERR error-path** — out-of-range → DECERR, `axi4lite_error_seq`,
-  scoreboard response-prediction, resp/oob coverage, legal-response SVA.
-- ✅ **UVM RAL** — `uvm_reg_block` + `uvm_mem` + `uvm_reg_adapter` in
-  `tb/axi4lite_ral.sv` (run `+UVM_TESTNAME=axi4lite_ral_test`).
-- ✅ **11 concurrent SVA assertions** bound to the interface.
-- ✅ **Formal proof** — 5 response/handshake safety properties proven with
-  SymbiYosys + Z3 (k-induction); see `formal/`.
-
-**Planned (not yet implemented):**
-- **Random back-pressure** — wait-states on AWREADY/WREADY/ARREADY + outstanding/
-  interleaved transactions.
-- **Gate-level / FPGA** smoke of the DUT.
-
-## Notes / honesty
-- Tested against UVM 1.2 semantics. First compile on a new tool version may need
-  trivial tweaks (e.g., `+define`s); the methodology and structure are the point.
-- Two injectable bugs are included (`INJECT_WSTRB_BUG` = data, `INJECT_BRESP_ERR` =
-  protocol) to demonstrate the scoreboard and the SVA layer each catching defects.
-```
+Full evidence and limitations are in [regression summary](docs/REGRESSION_SUMMARY.md) and Actions logs. No paid simulator, FPGA board, or subscription is required for the protocol and formal flows.

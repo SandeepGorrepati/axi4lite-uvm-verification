@@ -1,41 +1,24 @@
-# AXI4-Lite UVM — Interview Defense
+# Interview walkthrough
 
-Exactly how to talk about this project under pressure. Read it out loud until fluent.
+## Explain the architecture
 
-## 30-second pitch
-"I built a full UVM environment verifying an AXI4-Lite slave. It has the standard
-hierarchy — sequencer, driver, monitor, agent, env — a reference-model scoreboard that
-predicts both data and the response code, covergroups for functional coverage, concurrent
-SVA bound to the interface, and a UVM RAL model. I also verify the error path: out-of-range
-accesses must return DECERR. And I added two injectable bugs so I can show the testbench
-actually catches a data bug and a protocol bug."
+AW and W can arrive independently. The DUT retains address/data until both are present, performs byte-enabled memory updates, and returns B. Reads capture an address and return R. The passive UVM monitor reconstructs completed transactions; its scoreboard independently predicts byte updates and response codes.
 
-## Likely questions → crisp answers
-- **"Walk me through the env."** sequence → sequencer → driver → DUT → monitor → analysis
-  port → scoreboard + coverage; SVA bound in the interface. (See `ARCHITECTURE.md`.)
-- **"How does the scoreboard check?"** Reference model: a predicted memory. On writes it
-  updates the model honoring WSTRB; on reads it compares DUT data to the prediction; it also
-  predicts the response (OKAY in-range / DECERR out-of-range) and checks it.
-- **"Sequencer–driver handshake?"** driver `get_next_item` → drive → `item_done`; sequence
-  `start_item`/`finish_item` blocks until `item_done` (back-pressure).
-- **"Real SVA or procedural?"** Real concurrent `assert property` bound in `axi4lite_if.sv`
-  (handshake stability via `$stable`, no-X, legal response, bounded completion).
-- **"Covergroups vs counters?"** Real `covergroup`/`coverpoint`/`cross` (op, addr incl. oob,
-  strobe, resp). I drive to closure and read `get_inst_coverage()`.
-- **"What is RAL and why?"** Register Abstraction Layer — `uvm_reg_block` + `uvm_mem` + an
-  adapter; tests do `regmodel.mem.write/read` instead of hand-driving AW/W/B. Decouples
-  test intent from bus mechanics.
-- **"Prove it finds bugs."** Two defines: `INJECT_WSTRB_BUG` (data) → scoreboard MISMATCH;
-  `INJECT_BRESP_ERR` (protocol) → SVA fires. See `BUG_REPORTS.md`.
-- **"How do you reach coverage closure?"** directed corners + constrained-random across
-  seeds until every bin hits; write targeted tests for unhit bins.
+## Explain one meaningful bug
 
-## Known limitations (own them — don't bluff)
-- It's AXI4-**Lite** (single beat, no bursts/IDs) — a deliberate, clean scope.
-- The slave always returns OKAY/DECERR (no SLVERR by design); SLVERR is the injected
-  protocol bug.
-- Run on EDA Playground / Questa (UVM + covergroups need a commercial simulator).
+The original write-completion assertion was a sequence instead of a request-triggered implication. An AW-only trigger also ignores that W can arrive later. The corrected interface collects both handshakes, triggers a finite response expectation, and excludes BREADY from slave response generation. Bounds are an environment contract rather than an AXI latency guarantee.
 
-## If asked "what would you add next?"
-"Random back-pressure and outstanding/interleaved transactions, and a formal proof of the
-handshake properties (the SVA already expresses them) — see `FORMAL_ROADMAP.md`."
+## Explain how the checker was checked
+
+CI compiles a second real DUT with INJECT_WSTRB_BUG. That version writes disabled bytes. The protocol oracle predicts preservation of those bytes, so a readback mismatch must stop simulation. CI fails if the mutant unexpectedly passes.
+
+## Distinguish evidence
+
+- Icarus protocol simulation drives the actual RTL and compares against a Python byte-memory oracle; it does not execute UVM classes.
+- Actual-DUT formal is bounded safety for a four-word configuration and explicit assumptions.
+- Historical policy-model induction applies only to a separate simplified state machine.
+- UVM execution and covergroup status must be read from REGRESSION_SUMMARY.md and the current workflow logs.
+
+## State the limits
+
+The UVM driver serializes transactions. The monitor does not support arbitrary outstanding/interleaved traffic or reset recovery during an active transaction. Four-state checks need a four-state simulator. No claim of complete AXI compliance, exhaustive correctness, or production signoff is made.

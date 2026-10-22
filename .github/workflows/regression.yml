@@ -21,17 +21,19 @@ jobs:
           python3 scripts/gen_vectors.py
           iverilog -g2012 -s tb_protocol -o build/protocol rtl/axi4lite_slave.sv tb/tb_protocol.sv
           vvp build/protocol | tee protocol.log
-      - name: Prove checker detects injected byte-strobe bug
+      - name: Prove checker detects data and response mutations
         shell: bash
         run: |
           set -euo pipefail
-          iverilog -g2012 -DINJECT_WSTRB_BUG -s tb_protocol -o build/mutant rtl/axi4lite_slave.sv tb/tb_protocol.sv
-          if vvp build/mutant > mutation.log 2>&1; then
-            cat mutation.log
-            echo 'ERROR: mutant escaped checker'
-            exit 1
-          fi
-          grep 'R response' mutation.log
+          for mutant in INJECT_WSTRB_BUG INJECT_BRESP_ERR; do
+            iverilog -g2012 -D"$mutant" -s tb_protocol -o build/mutant rtl/axi4lite_slave.sv tb/tb_protocol.sv
+            if vvp build/mutant > "$mutant.log" 2>&1; then
+              cat "$mutant.log"
+              echo 'ERROR: mutant escaped checker'
+              exit 1
+            fi
+            grep -E '(R|B) response' "$mutant.log"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

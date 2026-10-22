@@ -1,37 +1,20 @@
-# AXI4-Lite UVM — Bug Reports
+# Defects and checker mutations
 
-Two deliberately injectable bugs demonstrate that the environment *catches* real
-defects (not just passes). Each is a mini bug report: symptom → detection → root cause
-→ how the checker found it.
+## Fixed defects
 
----
+| Defect | Root cause | Correction |
+|---|---|---|
+| Write completion property | Bare SVA sequence, AW-only trigger, unbounded delay | Pair accepted AW/W, implication, finite response bound |
+| Missing B stall check | No BVALID/BRESP persistence assertion | A_B_STABLE assertion |
+| UVM compile failures | Reserved `matches` identifier; declaration after statements | Rename counter; put declarations before statements |
+| RAL memory creation | Incorrect uvm_mem.configure signature | Construct with size/width/access, then configure(parent) |
+| Random read expectation | Assumed unwritten DUT memory is zero | Initialize all words through actual bus writes before random traffic |
+| No independent channel stress | AW/W launched together; READY always high | Timed channels, response stalls, all-mask timing sequence |
 
-## BUG-001 — Write ignores byte strobes (data bug)
-- **Enable:** compile with `+define+INJECT_WSTRB_BUG`
-- **Symptom:** a partial-strobe write (`WSTRB=0x1`) corrupts the un-strobed bytes.
-- **Repro:** write `0xFFFFFFFF` to `0x20`, then write `0x000000AA` with `WSTRB=0x1`.
-- **Expected:** `0xFFFFFFAA` (only byte 0 updated). **Buggy DUT:** `0x000000AA`.
-- **Detection:** reference-model scoreboard (honors WSTRB) flags:
-  `[SCB] READ MISMATCH addr=0x00000020 expected=0xFFFFFFAA got=0x000000AA`
-- **Root cause:** write path writes the full word instead of masking by `WSTRB`.
-- **Found by:** scoreboard data comparison. **Class:** functional / data-integrity.
+## Mutation checks
 
----
+`INJECT_WSTRB_BUG` deliberately overwrites all bytes despite WSTRB. `INJECT_BRESP_ERR` deliberately returns SLVERR where this DUT promises OKAY/DECERR. Both are test-only compile-time defects.
 
-## BUG-002 — Illegal response code (protocol bug)
-- **Enable:** compile with `+define+INJECT_BRESP_ERR`
-- **Symptom:** slave returns `SLVERR (2'b10)` on a normal read/write.
-- **Expected:** `OKAY (2'b00)` in-range, or `DECERR (2'b11)` out-of-range — `SLVERR` is illegal for this slave.
-- **Detection:** bound concurrent assertion fires:
-  `[SVA] BRESP illegal (not OKAY/DECERR)`
-- **Root cause:** response-code assignment driving an unsupported value.
-- **Found by:** SVA `A_BRESP_LEGAL` / `A_RRESP_LEGAL`. **Class:** protocol.
+The protocol CI compiles each mutant and requires a nonzero simulation exit containing a corresponding B/R response mismatch. If a mutant passes, CI fails. The checker validates an actual faulty RTL execution, not merely a hard-coded failing log.
 
----
-
-## Takeaway
-Two independent checking mechanisms — **scoreboard** (data) and **SVA** (protocol) —
-each catch a different class of bug. That's the point of the environment: it finds
-defects, and the failure log points straight at the root cause.
-
-*(Attach the actual failing-run screenshots here after the EDA Playground run.)*
+SLVERR is an AXI response code; the error here is violating this DUT's documented response policy, not claiming AXI universally forbids SLVERR. Original illustrative UVM error strings are not execution evidence. See current workflow logs and REGRESSION_SUMMARY.md.

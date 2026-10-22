@@ -44,6 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p build/uvm
           .tools/verilator-src/bin/verilator --version | tee uvm-tool.log
           .tools/verilator-src/bin/verilator --binary --timing --assert --coverage -Wno-fatal -j 2 \
             +define+UVM_NO_DPI +incdir+.tools/uvm/src +incdir+tb \
@@ -67,4 +68,3 @@ jobs:
           path: |
             uvm-*.log
             coverage.dat
-

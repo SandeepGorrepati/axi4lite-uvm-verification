@@ -17,7 +17,7 @@ class axi4lite_scoreboard extends uvm_scoreboard;
     localparam logic [1:0] R_DECERR = 2'b11;
     localparam bit [31:0]  VALID_BYTES = 32'h0000_0400;   // in-range byte span
 
-    int unsigned writes, reads, matches, mismatches, resp_mismatches;
+    int unsigned writes, reads, match_count, mismatches, resp_mismatches;
 
     function new(string name, uvm_component parent);
         super.new(name, parent);
@@ -51,7 +51,7 @@ class axi4lite_scoreboard extends uvm_scoreboard;
             if (!decerr) begin
                 bit [31:0] expected = ref_mem.exists(tr.addr) ? ref_mem[tr.addr] : 32'h0;
                 if (tr.data === expected) begin
-                    matches++;
+                    match_count++;
                     `uvm_info("SCB", $sformatf("READ MATCH  addr=0x%08h data=0x%08h",
                               tr.addr, tr.data), UVM_HIGH)
                 end else begin
@@ -70,7 +70,7 @@ class axi4lite_scoreboard extends uvm_scoreboard;
     function void report_phase(uvm_phase phase);
         `uvm_info("SCB", "============ SCOREBOARD SUMMARY ============", UVM_LOW)
         `uvm_info("SCB", $sformatf("writes=%0d reads=%0d MATCH=%0d MISMATCH=%0d RESP_MISMATCH=%0d",
-                  writes, reads, matches, mismatches, resp_mismatches), UVM_LOW)
+                  writes, reads, match_count, mismatches, resp_mismatches), UVM_LOW)
         if (mismatches == 0 && resp_mismatches == 0 && reads > 0)
             `uvm_info("SCB", "RESULT: PASS", UVM_LOW)
         else
@@ -78,3 +78,4 @@ class axi4lite_scoreboard extends uvm_scoreboard;
     endfunction
 
 endclass
+

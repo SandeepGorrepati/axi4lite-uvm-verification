@@ -5,7 +5,7 @@
 // - 32-bit data, 32-bit address (only ADDR_LSB+MEM_AW bits decoded)
 // - Independent AW / W acceptance, single outstanding response
 // - Returns OKAY (2'b00) for in-range accesses; DECERR (2'b11) for out-of-range
-//   (decode error) — memory left untouched on an out-of-range write
+//   (decode error) â€” memory left untouched on an out-of-range write
 // - Byte-enables (WSTRB) honored on writes
 //
 // Intentionally simple and spec-clean so it is a good DUT for a UVM testbench:
@@ -64,9 +64,12 @@ module axi4lite_slave #(
     logic [DATA_WIDTH/8-1:0] wstrb_q;
     logic                  w_hs_q;      // write-data captured, awaiting address
 
+    // This helper extracts word-index bits only; the full address is range-checked separately.
+    /* verilator lint_off UNUSEDSIGNAL */
     function automatic [MEM_AW-1:0] word_index(input logic [ADDR_WIDTH-1:0] a);
         word_index = a[ADDR_LSB +: MEM_AW];
     endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
 
     //--------------------------------------------------------------------------
     // Write address channel handshake
@@ -201,3 +204,4 @@ module axi4lite_slave #(
     end
 
 endmodule
+
